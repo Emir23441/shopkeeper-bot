@@ -4,7 +4,11 @@ import {
   REST,
   Routes,
   SlashCommandBuilder,
-  EmbedBuilder
+  EmbedBuilder,
+  ButtonBuilder,
+  ActionRowBuilder,
+  ButtonStyle,
+  PermissionFlagsBits
 } from "discord.js";
 import fs from "fs";
 import dotenv from "dotenv";
@@ -14,12 +18,15 @@ dotenv.config();
 const TOKEN = process.env.TOKEN;
 const CLIENT_ID = process.env.CLIENT_ID;
 const GUILD_ID = process.env.GUILD_ID;
+const ITEMS_LINK = process.env.ITEMSATIS_LINK;
+const MAGAZA_RESIM = process.env.MAGAZA_RESIM_LINK;
 
 const client = new Client({
   intents: [GatewayIntentBits.Guilds]
 });
 
-// ================== JSON LOAD ==================
+
+// ================== JSON SİSTEM ==================
 function loadProducts() {
   if (!fs.existsSync("./urunler.json")) {
     fs.writeFileSync("./urunler.json", "[]");
@@ -31,25 +38,29 @@ function saveProducts(data) {
   fs.writeFileSync("./urunler.json", JSON.stringify(data, null, 2));
 }
 
+
 // ================== SLASH KOMUTLAR ==================
 const commands = [
+
   new SlashCommandBuilder()
     .setName("urun-ekle")
     .setDescription("Yeni ürün ekler")
+    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
     .addStringOption(o =>
       o.setName("isim").setDescription("Ürün adı").setRequired(true))
     .addIntegerOption(o =>
-      o.setName("fiyat").setDescription("Ürün fiyatı").setRequired(true))
+      o.setName("fiyat").setDescription("Fiyat").setRequired(true))
     .addIntegerOption(o =>
-      o.setName("stok").setDescription("Stok miktarı").setRequired(true))
+      o.setName("stok").setDescription("Stok").setRequired(true))
     .addIntegerOption(o =>
-      o.setName("indirim").setDescription("İndirim % (0 yazılabilir)").setRequired(true)),
+      o.setName("indirim").setDescription("İndirim %").setRequired(true)),
 
   new SlashCommandBuilder()
     .setName("urun-sil")
     .setDescription("Ürün siler")
+    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
     .addStringOption(o =>
-      o.setName("isim").setDescription("Silinecek ürün").setRequired(true)),
+      o.setName("isim").setDescription("Ürün adı").setRequired(true)),
 
   new SlashCommandBuilder()
     .setName("market")
@@ -57,9 +68,18 @@ const commands = [
 
   new SlashCommandBuilder()
     .setName("satinal")
-    .setDescription("Ürün satın alır")
+    .setDescription("Ürün satın al")
     .addStringOption(o =>
-      o.setName("isim").setDescription("Ürün adı").setRequired(true))
+      o.setName("isim").setDescription("Ürün adı").setRequired(true)),
+
+  new SlashCommandBuilder()
+    .setName("duyuru")
+    .setDescription("Premium duyuru gönderir")
+    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+    .addStringOption(o =>
+      o.setName("mesaj")
+        .setDescription("Duyuru mesajı")
+        .setRequired(true))
 ];
 
 const rest = new REST({ version: "10" }).setToken(TOKEN);
@@ -76,10 +96,12 @@ const rest = new REST({ version: "10" }).setToken(TOKEN);
   }
 })();
 
-// ================== BOT READY ==================
+
+// ================== READY ==================
 client.once("ready", () => {
   console.log(`Bot aktif: ${client.user.tag}`);
 });
+
 
 // ================== KOMUT HANDLER ==================
 client.on("interactionCreate", async interaction => {
@@ -87,10 +109,8 @@ client.on("interactionCreate", async interaction => {
 
   const products = loadProducts();
 
-  // SADECE ADMIN EKLEYEBİLSİN
+  // ================== ÜRÜN EKLE ==================
   if (interaction.commandName === "urun-ekle") {
-    if (!interaction.member.permissions.has("Administrator"))
-      return interaction.reply({ content: "❌ Sadece admin kullanabilir.", ephemeral: true });
 
     const isim = interaction.options.getString("isim");
     const fiyat = interaction.options.getInteger("fiyat");
@@ -100,30 +120,32 @@ client.on("interactionCreate", async interaction => {
     products.push({ isim, fiyat, stok, indirim });
     saveProducts(products);
 
-    interaction.reply(`✅ ${isim} eklendi.`);
+    return interaction.reply(`✅ ${isim} eklendi.`);
   }
 
+  // ================== ÜRÜN SİL ==================
   if (interaction.commandName === "urun-sil") {
-    if (!interaction.member.permissions.has("Administrator"))
-      return interaction.reply({ content: "❌ Sadece admin kullanabilir.", ephemeral: true });
 
     const isim = interaction.options.getString("isim");
     const newProducts = products.filter(p => p.isim !== isim);
     saveProducts(newProducts);
 
-    interaction.reply(`🗑️ ${isim} silindi.`);
+    return interaction.reply(`🗑️ ${isim} silindi.`);
   }
 
+  // ================== MARKET ==================
   if (interaction.commandName === "market") {
+
     if (products.length === 0)
       return interaction.reply("Market boş.");
 
     const embed = new EmbedBuilder()
       .setTitle("🛒 ShopKeeper Market")
-      .setColor("Gold");
+      .setColor("#ff9900");
 
     products.forEach(p => {
       const indirimli = p.fiyat - (p.fiyat * p.indirim / 100);
+
       embed.addFields({
         name: p.isim,
         value:
@@ -133,10 +155,12 @@ client.on("interactionCreate", async interaction => {
       });
     });
 
-    interaction.reply({ embeds: [embed] });
+    return interaction.reply({ embeds: [embed] });
   }
 
+  // ================== SATIN AL ==================
   if (interaction.commandName === "satinal") {
+
     const isim = interaction.options.getString("isim");
     const urun = products.find(p => p.isim === isim);
 
@@ -149,8 +173,48 @@ client.on("interactionCreate", async interaction => {
     urun.stok -= 1;
     saveProducts(products);
 
-    interaction.reply(`✅ ${isim} satın alındı. Kalan stok: ${urun.stok}`);
+    return interaction.reply(`✅ ${isim} satın alındı. Kalan stok: ${urun.stok}`);
   }
+
+  // ================== DUYURU ==================
+  if (interaction.commandName === "duyuru") {
+
+    const mesaj = interaction.options.getString("mesaj");
+
+    const embed = new EmbedBuilder()
+      .setAuthor({
+        name: "🛒 ShopKeeper Premium Duyuru",
+        iconURL: client.user.displayAvatarURL()
+      })
+      .setTitle("🚀 YENİ DUYURU")
+      .setDescription(`✨ ${mesaj}`)
+      .setColor("#ff9900")
+      .setImage(MAGAZA_RESIM || null)
+      .setThumbnail(client.user.displayAvatarURL())
+      .setFooter({
+        text: `Duyuruyu yapan: ${interaction.user.tag}`
+      })
+      .setTimestamp();
+
+    const button = new ButtonBuilder()
+      .setLabel("🛍️ Mağazaya Git")
+      .setStyle(ButtonStyle.Link)
+      .setURL(ITEMS_LINK);
+
+    const row = new ActionRowBuilder().addComponents(button);
+
+    await interaction.channel.send({
+      content: "@everyone",
+      embeds: [embed],
+      components: [row]
+    });
+
+    return interaction.reply({
+      content: "✅ Premium duyuru gönderildi.",
+      ephemeral: true
+    });
+  }
+
 });
 
 client.login(TOKEN);
