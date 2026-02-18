@@ -1,10 +1,16 @@
-{
-  "name": "shopkeeper-bot",
-  "version": "1.0.0",
-  "type": "module",
-  "main": "index.js",
-  "dependencies": {
-    "discord.js": "^14.14.1",
-    "dotenv": "^16.3.1"
-  }
-}
+import { Client, GatewayIntentBits } from "discord.js";
+import dotenv from "dotenv";
+
+dotenv.config();
+
+const TOKEN = process.env.TOKEN;
+
+const client = new Client({
+  intents: [GatewayIntentBits.Guilds]
+});
+
+client.once("ready", () => {
+  console.log(`Bot aktif: ${client.user.tag}`);
+});
+
+client.login(TOKEN);
