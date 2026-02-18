@@ -1,0 +1,166 @@
+import {
+  Client,
+  GatewayIntentBits,
+  SlashCommandBuilder,
+  REST,
+  Routes,
+  PermissionFlagsBits,
+  EmbedBuilder
+} from "discord.js";
+import dotenv from "dotenv";
+import fs from "fs";
+
+dotenv.config();
+
+const TOKEN = process.env.TOKEN;
+const CLIENT_ID = process.env.CLIENT_ID;
+const GUILD_ID = process.env.GUILD_ID;
+
+const client = new Client({
+  intents: [GatewayIntentBits.Guilds]
+});
+
+const dosyaYolu = "./urunler.json";
+
+/* DOSYA */
+function urunleriGetir() {
+  if (!fs.existsSync(dosyaYolu)) fs.writeFileSync(dosyaYolu, "[]");
+  return JSON.parse(fs.readFileSync(dosyaYolu));
+}
+
+function urunleriKaydet(liste) {
+  fs.writeFileSync(dosyaYolu, JSON.stringify(liste, null, 2));
+}
+
+/* KOMUTLAR */
+const commands = [
+
+  new SlashCommandBuilder()
+    .setName("urun-ekle")
+    .setDescription("Yeni ürün ekler (Admin)")
+    .addStringOption(o =>
+      o.setName("isim").setDescription("Ürün adı").setRequired(true))
+    .addNumberOption(o =>
+      o.setName("fiyat").setDescription("Fiyat").setRequired(true))
+    .addIntegerOption(o =>
+      o.setName("stok").setDescription("Stok miktarı").setRequired(true))
+    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+
+  new SlashCommandBuilder()
+    .setName("urun-sil")
+    .setDescription("Ürün siler (Admin)")
+    .addStringOption(o =>
+      o.setName("isim").setDescription("Ürün adı").setRequired(true))
+    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+
+  new SlashCommandBuilder()
+    .setName("indirim-ayarla")
+    .setDescription("İndirim ayarlar (Admin)")
+    .addStringOption(o =>
+      o.setName("isim").setDescription("Ürün adı").setRequired(true))
+    .addIntegerOption(o =>
+      o.setName("oran").setDescription("Yüzde").setRequired(true))
+    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+
+  new SlashCommandBuilder()
+    .setName("market")
+    .setDescription("Ürünleri listeler"),
+
+  new SlashCommandBuilder()
+    .setName("satinal")
+    .setDescription("Ürün satın al")
+    .addStringOption(o =>
+      o.setName("isim")
+        .setDescription("Satın alınacak ürün")
+        .setRequired(true))
+
+].map(c => c.toJSON());
+
+const rest = new REST({ version: "10" }).setToken(TOKEN);
+
+(async () => {
+  await rest.put(
+    Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
+    { body: commands }
+  );
+})();
+
+/* KOMUT ÇALIŞTIRMA */
+client.on("interactionCreate", async interaction => {
+  if (!interaction.isChatInputCommand()) return;
+
+  let liste = urunleriGetir();
+
+  // ÜRÜN EKLE
+  if (interaction.commandName === "urun-ekle") {
+    const isim = interaction.options.getString("isim");
+    const fiyat = interaction.options.getNumber("fiyat");
+    const stok = interaction.options.getInteger("stok");
+
+    liste.push({ isim, fiyat, stok, indirim: 0 });
+    urunleriKaydet(liste);
+
+    return interaction.reply(`✅ ${isim} eklendi.`);
+  }
+
+  // SATIN AL
+  if (interaction.commandName === "satinal") {
+    const isim = interaction.options.getString("isim");
+    const urun = liste.find(u => u.isim === isim);
+
+    if (!urun)
+      return interaction.reply("❌ Ürün bulunamadı.");
+
+    if (urun.stok <= 0)
+      return interaction.reply("🚫 Bu ürün stokta yok.");
+
+    // Stok düş
+    urun.stok -= 1;
+    urunleriKaydet(liste);
+
+    let fiyat = urun.fiyat;
+    let indirimli = fiyat - (fiyat * urun.indirim / 100);
+
+    const embed = new EmbedBuilder()
+      .setTitle("✅ Satın Alma Başarılı")
+      .setColor(0x00ff00)
+      .addFields(
+        { name: "Ürün", value: urun.isim, inline: true },
+        { name: "Ödenen Tutar", value: `${indirimli}₺`, inline: true },
+        { name: "Kalan Stok", value: `${urun.stok}`, inline: true }
+      )
+      .setFooter({ text: interaction.user.username })
+      .setTimestamp();
+
+    return interaction.reply({ embeds: [embed] });
+  }
+
+  // MARKET
+  if (interaction.commandName === "market") {
+    if (liste.length === 0)
+      return interaction.reply("Ürün yok.");
+
+    const embed = new EmbedBuilder()
+      .setTitle("🛒 ShopKeeper Market")
+      .setColor(0x0099ff)
+      .setTimestamp();
+
+    liste.forEach(urun => {
+      let fiyat = urun.fiyat;
+      let indirimli = fiyat - (fiyat * urun.indirim / 100);
+
+      embed.addFields({
+        name: `${urun.isim} (${urun.stok} adet)`,
+        value:
+          urun.indirim > 0
+            ? `~~${fiyat}₺~~ → **${indirimli}₺** 🔥`
+            : `${fiyat}₺`,
+        inline: false
+      });
+    });
+
+    return interaction.reply({ embeds: [embed] });
+  }
+});
+
+client.login(TOKEN);
