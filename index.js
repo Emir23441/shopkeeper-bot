@@ -25,16 +25,18 @@ const client = new Client({
 });
 
 
-// ================= JSON SİSTEM =================
-function loadProducts() {
-  if (!fs.existsSync("./urunler.json")) {
-    fs.writeFileSync("./urunler.json", "[]");
+// ================= DOSYA SİSTEMİ =================
+const dosyaYolu = "./urunler.json";
+
+function urunleriGetir() {
+  if (!fs.existsSync(dosyaYolu)) {
+    fs.writeFileSync(dosyaYolu, "[]");
   }
-  return JSON.parse(fs.readFileSync("./urunler.json"));
+  return JSON.parse(fs.readFileSync(dosyaYolu));
 }
 
-function saveProducts(data) {
-  fs.writeFileSync("./urunler.json", JSON.stringify(data, null, 2));
+function urunleriKaydet(data) {
+  fs.writeFileSync(dosyaYolu, JSON.stringify(data, null, 2));
 }
 
 
@@ -91,7 +93,7 @@ const rest = new REST({ version: "10" }).setToken(TOKEN);
     );
     console.log("Slash komutlar yüklendi.");
   } catch (err) {
-    console.error(err);
+    console.error("Slash yükleme hatası:", err);
   }
 })();
 
@@ -106,113 +108,115 @@ client.once("ready", () => {
 client.on("interactionCreate", async interaction => {
   if (!interaction.isChatInputCommand()) return;
 
-  const products = loadProducts();
+  try {
 
-  // ===== ÜRÜN EKLE =====
-  if (interaction.commandName === "urun-ekle") {
+    await interaction.deferReply({ ephemeral: false });
 
-    const isim = interaction.options.getString("isim");
-    const fiyat = interaction.options.getInteger("fiyat");
-    const stok = interaction.options.getInteger("stok");
-    const indirim = interaction.options.getInteger("indirim");
+    let products = urunleriGetir();
 
-    products.push({ isim, fiyat, stok, indirim });
-    saveProducts(products);
+    // ===== ÜRÜN EKLE =====
+    if (interaction.commandName === "urun-ekle") {
 
-    return interaction.reply(`✅ ${isim} eklendi.`);
-  }
+      const isim = interaction.options.getString("isim");
+      const fiyat = interaction.options.getInteger("fiyat");
+      const stok = interaction.options.getInteger("stok");
+      const indirim = interaction.options.getInteger("indirim");
 
-  // ===== ÜRÜN SİL =====
-  if (interaction.commandName === "urun-sil") {
+      products.push({ isim, fiyat, stok, indirim });
+      urunleriKaydet(products);
 
-    const isim = interaction.options.getString("isim");
-    const newProducts = products.filter(p => p.isim !== isim);
-    saveProducts(newProducts);
+      return interaction.editReply(`✅ ${isim} eklendi.`);
+    }
 
-    return interaction.reply(`🗑️ ${isim} silindi.`);
-  }
+    // ===== ÜRÜN SİL =====
+    if (interaction.commandName === "urun-sil") {
 
-  // ===== MARKET =====
-  if (interaction.commandName === "market") {
+      const isim = interaction.options.getString("isim");
+      products = products.filter(p => p.isim !== isim);
+      urunleriKaydet(products);
 
-    if (products.length === 0)
-      return interaction.reply("Market boş.");
+      return interaction.editReply(`🗑️ ${isim} silindi.`);
+    }
 
-    const embed = new EmbedBuilder()
-      .setTitle("🛒 ShopKeeper Market")
-      .setColor("#ff9900");
+    // ===== MARKET =====
+    if (interaction.commandName === "market") {
 
-    products.forEach(p => {
-      const indirimli = p.fiyat - (p.fiyat * p.indirim / 100);
+      if (products.length === 0)
+        return interaction.editReply("Market boş.");
 
-      embed.addFields({
-        name: p.isim,
-        value:
-          `💰 Fiyat: ${indirimli} TL\n` +
-          `📦 Stok: ${p.stok}\n` +
-          `🔥 İndirim: %${p.indirim}`
+      const embed = new EmbedBuilder()
+        .setTitle("🛒 ShopKeeper Market")
+        .setColor("#ff9900");
+
+      products.forEach(p => {
+        const indirimli = p.fiyat - (p.fiyat * p.indirim / 100);
+
+        embed.addFields({
+          name: p.isim,
+          value:
+            `💰 Fiyat: ${indirimli} TL\n` +
+            `📦 Stok: ${p.stok}\n` +
+            `🔥 İndirim: %${p.indirim}`
+        });
       });
-    });
 
-    return interaction.reply({ embeds: [embed] });
+      return interaction.editReply({ embeds: [embed] });
+    }
+
+    // ===== SATINAL =====
+    if (interaction.commandName === "satinal") {
+
+      const isim = interaction.options.getString("isim");
+      const urun = products.find(p => p.isim === isim);
+
+      if (!urun)
+        return interaction.editReply("❌ Ürün bulunamadı.");
+
+      if (urun.stok <= 0)
+        return interaction.editReply("❌ Stok bitti.");
+
+      urun.stok -= 1;
+      urunleriKaydet(products);
+
+      return interaction.editReply(`✅ ${isim} satın alındı. Kalan stok: ${urun.stok}`);
+    }
+
+    // ===== DUYURU =====
+    if (interaction.commandName === "duyuru") {
+
+      const mesaj = interaction.options.getString("mesaj");
+
+      const embed = new EmbedBuilder()
+        .setTitle("🚀 YENİ DUYURU")
+        .setDescription(`✨ ${mesaj}`)
+        .setColor("#ff9900")
+        .setTimestamp();
+
+      const button = new ButtonBuilder()
+        .setLabel("🛍️ Mağazaya Git")
+        .setStyle(ButtonStyle.Link)
+        .setURL(ITEMS_LINK);
+
+      const row = new ActionRowBuilder().addComponents(button);
+
+      await interaction.channel.send({
+        content: "@everyone",
+        embeds: [embed],
+        components: [row]
+      });
+
+      return interaction.editReply("✅ Premium duyuru gönderildi.");
+    }
+
+  } catch (err) {
+    console.error("Interaction hata:", err);
+
+    if (interaction.deferred || interaction.replied) {
+      await interaction.followUp({ content: "❌ Bir hata oluştu.", ephemeral: true });
+    } else {
+      await interaction.reply({ content: "❌ Bir hata oluştu.", ephemeral: true });
+    }
   }
-
-  // ===== SATIN AL =====
-  if (interaction.commandName === "satinal") {
-
-    const isim = interaction.options.getString("isim");
-    const urun = products.find(p => p.isim === isim);
-
-    if (!urun)
-      return interaction.reply("❌ Ürün bulunamadı.");
-
-    if (urun.stok <= 0)
-      return interaction.reply("❌ Stok bitti.");
-
-    urun.stok -= 1;
-    saveProducts(products);
-
-    return interaction.reply(`✅ ${isim} satın alındı. Kalan stok: ${urun.stok}`);
-  }
-
-  // ===== DUYURU =====
-  if (interaction.commandName === "duyuru") {
-
-    const mesaj = interaction.options.getString("mesaj");
-
-    const embed = new EmbedBuilder()
-      .setAuthor({
-        name: "🛒 ShopKeeper Premium Duyuru",
-        iconURL: client.user.displayAvatarURL()
-      })
-      .setTitle("🚀 YENİ DUYURU")
-      .setDescription(`✨ ${mesaj}`)
-      .setColor("#ff9900")
-      .setThumbnail(client.user.displayAvatarURL())
-      .setFooter({
-        text: `Duyuruyu yapan: ${interaction.user.tag}`
-      })
-      .setTimestamp();
-
-    const button = new ButtonBuilder()
-      .setLabel("🛍️ Mağazaya Git")
-      .setStyle(ButtonStyle.Link)
-      .setURL(ITEMS_LINK);
-
-    const row = new ActionRowBuilder().addComponents(button);
-
-    await interaction.channel.send({
-      content: "@everyone",
-      embeds: [embed],
-      components: [row]
-    });
-
-    return interaction.reply({
-      content: "✅ Premium duyuru gönderildi.",
-      ephemeral: true
-    });
-  }
-
 });
 
 client.login(TOKEN);
