@@ -19,14 +19,13 @@ const TOKEN = process.env.TOKEN;
 const CLIENT_ID = process.env.CLIENT_ID;
 const GUILD_ID = process.env.GUILD_ID;
 const ITEMS_LINK = process.env.ITEMSATIS_LINK;
-const MAGAZA_RESIM = process.env.MAGAZA_RESIM_LINK;
 
 const client = new Client({
   intents: [GatewayIntentBits.Guilds]
 });
 
 
-// ================== JSON SİSTEM ==================
+// ================= JSON SİSTEM =================
 function loadProducts() {
   if (!fs.existsSync("./urunler.json")) {
     fs.writeFileSync("./urunler.json", "[]");
@@ -39,7 +38,7 @@ function saveProducts(data) {
 }
 
 
-// ================== SLASH KOMUTLAR ==================
+// ================= SLASH KOMUTLAR =================
 const commands = [
 
   new SlashCommandBuilder()
@@ -97,19 +96,19 @@ const rest = new REST({ version: "10" }).setToken(TOKEN);
 })();
 
 
-// ================== READY ==================
+// ================= READY =================
 client.once("ready", () => {
   console.log(`Bot aktif: ${client.user.tag}`);
 });
 
 
-// ================== KOMUT HANDLER ==================
+// ================= KOMUT HANDLER =================
 client.on("interactionCreate", async interaction => {
   if (!interaction.isChatInputCommand()) return;
 
   const products = loadProducts();
 
-  // ================== ÜRÜN EKLE ==================
+  // ===== ÜRÜN EKLE =====
   if (interaction.commandName === "urun-ekle") {
 
     const isim = interaction.options.getString("isim");
@@ -123,7 +122,7 @@ client.on("interactionCreate", async interaction => {
     return interaction.reply(`✅ ${isim} eklendi.`);
   }
 
-  // ================== ÜRÜN SİL ==================
+  // ===== ÜRÜN SİL =====
   if (interaction.commandName === "urun-sil") {
 
     const isim = interaction.options.getString("isim");
@@ -133,7 +132,7 @@ client.on("interactionCreate", async interaction => {
     return interaction.reply(`🗑️ ${isim} silindi.`);
   }
 
-  // ================== MARKET ==================
+  // ===== MARKET =====
   if (interaction.commandName === "market") {
 
     if (products.length === 0)
@@ -158,7 +157,7 @@ client.on("interactionCreate", async interaction => {
     return interaction.reply({ embeds: [embed] });
   }
 
-  // ================== SATIN AL ==================
+  // ===== SATIN AL =====
   if (interaction.commandName === "satinal") {
 
     const isim = interaction.options.getString("isim");
@@ -176,7 +175,7 @@ client.on("interactionCreate", async interaction => {
     return interaction.reply(`✅ ${isim} satın alındı. Kalan stok: ${urun.stok}`);
   }
 
-  // ================== DUYURU ==================
+  // ===== DUYURU =====
   if (interaction.commandName === "duyuru") {
 
     const mesaj = interaction.options.getString("mesaj");
@@ -189,7 +188,6 @@ client.on("interactionCreate", async interaction => {
       .setTitle("🚀 YENİ DUYURU")
       .setDescription(`✨ ${mesaj}`)
       .setColor("#ff9900")
-      .setImage(MAGAZA_RESIM || null)
       .setThumbnail(client.user.displayAvatarURL())
       .setFooter({
         text: `Duyuruyu yapan: ${interaction.user.tag}`
